@@ -39,9 +39,11 @@ def coverage(resource, expected):
     if expected == 0:
         return 1
 
-    deduplicated_resources = {
-        item["metadata"]["name"] for item in json.loads(tctl_get(resource))
-    }
+    resources = []
+    for resource_kind in resource.split(","):
+        resources += json.loads(tctl_get(resource_kind))
+
+    deduplicated_resources = {item["metadata"]["name"] for item in resources}
     return len(deduplicated_resources) / expected
 
 
@@ -91,7 +93,7 @@ def main():
             "ssh": "node",
             "kubernetes": "kube_server",
             "databases": "db_server",
-            "applications": "app_server",
+            "applications": "app_server,saml_idp_service_provider",
             "windows_desktop": "windows_desktop",
             "linux_desktop": "linux_desktop",
         }
