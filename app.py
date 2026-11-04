@@ -1,8 +1,13 @@
 import json
 import subprocess
 import time
-
+from urllib.parse import urlencode
+from urllib.request import urlopen
 from prometheus_client import Gauge, start_http_server
+
+PROMETHEUS_URL = (
+    "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+)
 
 maturity_control = Gauge(
     "teleport_maturity_control",
@@ -18,6 +23,17 @@ maturity_resource_coverage = Gauge(
 
 
 maturity_score = Gauge("teleport_maturity_score", "Aggregated maturity level.")
+
+
+def prometheus_query(expression):
+    query = urlencode({"query": expression})
+
+    with urlopen(f"{PROMETHEUS_URL}/api/v1/query?{query}", timeout=30) as response:
+        data = json.load(response)
+
+    results = data["data"]["result"]
+
+    return float(results[0]["value"][1])
 
 
 def tctl_get(resource):
@@ -80,6 +96,15 @@ def main():
             level="2",
             control="sso",
         ).set(int(bool(json.loads(tctl_get("connectors")))))
+
+        # Audit events
+        audit_activity = prometheus_query(
+            "sum(increase(teleport_audit_emit_events[7d])) > bool 0"
+        )
+        maturity_control.labels(
+            level="2",
+            control="audit_activity",
+        ).set(audit_activity)
 
         # Resource coverage
         coverage_thresholds = {
