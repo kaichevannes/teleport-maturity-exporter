@@ -91,21 +91,37 @@ def main():
 
         inventory = config["inventory"]
 
+        ## Level 2
         # SSO
         maturity_control.labels(
             level="2",
             control="sso",
         ).set(int(bool(json.loads(tctl_get("connectors")))))
 
+        ## Level 3
         # Audit events
         audit_activity = prometheus_query(
             "sum(increase(teleport_audit_emit_events[7d])) > bool 0"
         )
         maturity_control.labels(
-            level="2",
+            level="3",
             control="audit_activity",
         ).set(audit_activity)
 
+        ## Level 4
+        # Machine Identity
+        maturity_control.labels(
+            level="4",
+            control="machine_id",
+        ).set(int(bool(json.loads(tctl_get("bot")))))
+
+        # Workload Identity
+        maturity_control.labels(
+            level="4",
+            control="workload_id",
+        ).set(int(bool(json.loads(tctl_get("workload_identity")))))
+
+        ## All levels
         # Resource coverage
         coverage_thresholds = {
             2: 0.5,
