@@ -22,6 +22,12 @@ maturity_resource_coverage = Gauge(
     ["type"],
 )
 
+maturity_standing_access = Gauge(
+    "teleport_maturity_standing_access",
+    "Number of resources identities have standing access to",
+    ["identity"],
+)
+
 
 maturity_score = Gauge("teleport_maturity_score", "Aggregated maturity level.")
 
@@ -64,6 +70,24 @@ def tctl_get(resource):
         text=True,
         timeout=30,
     )
+
+
+def tctl_check(*args):
+    try:
+        result = subprocess.run(
+            [
+                "/usr/local/bin/tctl",
+                "--auth-server=kaichevannes-teleport.uk:443",
+                "--identity=/opt/machine-id/identity",
+                *args,
+            ],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            timeout=30,
+        )
+        return int(result.returncode == 0)
+    except subprocess.TimeoutExpired:
+        return 0
 
 
 def coverage(resource, expected):
@@ -172,6 +196,97 @@ def main():
             level="4",
             control="access_request_activity",
         ).set(int(request_count > 0))
+
+        ## Level 5
+        # Access Graph Enabled
+        maturity_control.labels(
+            level="5",
+            control="access_graph_enabled",
+        ).set(
+            tctl_check(
+                "access-review",
+                "--query=SELECT * FROM access_path",
+                "--no-activity",
+                "--limit=1",
+                "--format=json",
+            )
+        )
+
+        # Identity Center Enabled
+        maturity_control.labels(
+            level="5",
+            control="identity_center_enabled",
+        ).set(
+            tctl_check(
+                "investigate",
+                "--from=1h",
+                "--limit=1",
+                "--format=text",
+                "--no-all-facets",
+                "--no-show-unmatched",
+            )
+        )
+
+        # SSH Key Scanning Enabled
+        try:
+            access_graph_settings = json.loads(tctl_get("access_graph_settings"))
+            scanning_enabled = int(
+                any(
+                    item["spec"].get("secrets_scan_config") == "enabled"
+                    for item in access_graph_settings
+                )
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            scanning_enabled = 0
+
+        maturity_control.labels(
+            level="5",
+            control="ssh_key_scanning_enabled",
+        ).set(scanning_enabled)
+
+        # No standing access
+        maturity_standing_access.clear()
+        try:
+            response = json.loads(
+                subprocess.check_output(
+                    [
+                        "/usr/local/bin/tctl",
+                        "--auth-server=kaichevannes-teleport.uk:443",
+                        "--identity=/opt/machine-id/identity",
+                        "access-review",
+                        "--query=SELECT * FROM access_path WHERE standing_privileges >= 1",
+                        "--limit=10000",
+                        "--no-activity",
+                        "--format=json",
+                    ],
+                    text=True,
+                    timeout=30,
+                )
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            no_standing_access = 0
+        else:
+            for item in response["identities"]:
+                identity = item["identity"]
+
+                maturity_standing_access.labels(
+                    identity=identity["name"],
+                ).set(
+                    len(
+                        {
+                            entry["resource"]["id"]
+                            for entry in item["resources"]
+                            if entry["level"] == "standing"
+                        }
+                    )
+                )
+
+            no_standing_access = int(not response["identities"])
+
+        maturity_control.labels(
+            level="5",
+            control="no_standing_access",
+        ).set(no_standing_access)
 
         ## All levels
         # Resource coverage
