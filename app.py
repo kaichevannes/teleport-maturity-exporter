@@ -2,12 +2,13 @@ import json
 import subprocess
 import time
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from prometheus_client import Gauge, start_http_server
 
 PROMETHEUS_URL = (
     "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
 )
+LOKI_URL = "http://loki-gateway.monitoring.svc.cluster.local"
 
 maturity_control = Gauge(
     "teleport_maturity_control",
@@ -32,7 +33,21 @@ def prometheus_query(expression):
         data = json.load(response)
 
     results = data["data"]["result"]
+    return float(results[0]["value"][1])
 
+
+def loki_query(expression):
+    query = urlencode({"query": expression})
+
+    request = Request(
+        f"{LOKI_URL}/loki/api/v1/query?{query}",
+        headers={"X-Scope-OrgID": "teleport-audit"},
+    )
+
+    with urlopen(request, timeout=30) as response:
+        data = json.load(response)
+
+    results = data["data"]["result"]
     return float(results[0]["value"][1])
 
 
@@ -141,6 +156,22 @@ def main():
             level="4",
             control="devops_identity_configured",
         ).set(int(bool(join_tokens)))
+
+        # Access Request activity
+        request_count = loki_query(
+            """
+            sum(count_over_time(
+                {job="teleport-audit"}
+                | json
+                | event="access_request.create"
+                [7d]
+            )) or vector(0)
+            """
+        )
+        maturity_control.labels(
+            level="4",
+            control="access_request_activity",
+        ).set(int(request_count > 0))
 
         ## All levels
         # Resource coverage
