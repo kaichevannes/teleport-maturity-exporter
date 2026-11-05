@@ -121,6 +121,27 @@ def main():
             control="workload_id",
         ).set(int(bool(json.loads(tctl_get("workload_identity")))))
 
+        # CI/CD
+        ci_join_methods = {
+            "azure_devops",
+            "bitbucket",
+            "circleci",
+            "env0",
+            "github",
+            "gitlab",
+            "spacelift",
+            "terraform_cloud",
+        }
+        join_tokens = [
+            token
+            for token in json.loads(tctl_get("token"))
+            if token["spec"].get("join_method") in ci_join_methods
+        ]
+        maturity_control.labels(
+            level="4",
+            control="devops_identity_configured",
+        ).set(int(bool(join_tokens)))
+
         ## All levels
         # Resource coverage
         coverage_thresholds = {
