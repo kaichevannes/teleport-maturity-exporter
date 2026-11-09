@@ -202,7 +202,7 @@ def main():
         maturity_control.labels(
             level="5",
             control="access_graph_enabled",
-            display_name="Access Graph Configured",
+            display_name="Access Graph Operational",
         ).set(
             tctl_check(
                 "access-review",
@@ -217,7 +217,7 @@ def main():
         maturity_control.labels(
             level="5",
             control="identity_center_enabled",
-            display_name="Identity Center Configured",
+            display_name="Identity Activity Center Operational",
         ).set(
             tctl_check(
                 "investigate",
@@ -312,7 +312,7 @@ def main():
             "ssh": "SSH",
             "kubernetes": "Kubernetes",
             "databases": "Database",
-            "applicationss": "Application",
+            "applications": "Application",
             "windows_desktop": "Windows Desktop",
             "linux_desktop": "Linux Desktop",
         }
@@ -320,7 +320,9 @@ def main():
         for resource, resource_kind in resource_kinds.items():
             value = coverage(resource_kind, inventory[resource])
 
-            maturity_resource_coverage.labels(type=resource).set(value)
+            maturity_resource_coverage.labels(
+                type=resource, display_name=resource_display_names[resource]
+            ).set(value)
 
             for level, threshold in coverage_thresholds.items():
                 maturity_control.labels(
