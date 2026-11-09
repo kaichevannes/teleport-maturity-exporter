@@ -279,7 +279,7 @@ def main():
                         {
                             entry["resource"]["id"]
                             for entry in item["resources"]
-                            if entry["level"] == "standing"
+                            if entry["level"] in {"standing", "impersonate"}
                         }
                     )
                 )
