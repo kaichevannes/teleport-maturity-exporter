@@ -99,7 +99,7 @@ def coverage(resource, expected):
         resources += json.loads(tctl_get(resource_kind))
 
     deduplicated_resources = {item["metadata"]["name"] for item in resources}
-    return len(deduplicated_resources) / expected
+    return min(len(deduplicated_resources) / expected, 1.0)
 
 
 def calculate_score():
@@ -328,7 +328,7 @@ def main():
                 maturity_control.labels(
                     level=str(level),
                     control=f"{resource}_coverage",
-                    display_name=f"≥{threshold:.0%} {resource_display_names[resource]} Coverage",
+                    display_name=f"{'≥' if threshold < 1 else ''}{threshold:.0%} {resource_display_names[resource]} Coverage",
                 ).set(int(value >= threshold))
 
         maturity_score.set(calculate_score())
