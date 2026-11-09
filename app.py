@@ -13,13 +13,13 @@ LOKI_URL = "http://loki-gateway.monitoring.svc.cluster.local"
 maturity_control = Gauge(
     "teleport_maturity_control",
     "Whether a Teleport maturity control is satisfied",
-    ["level", "control"],
+    ["level", "control", "display_name"],
 )
 
 maturity_resource_coverage = Gauge(
     "teleport_maturity_resource_coverage",
     "Enrollment coverage by resource type",
-    ["type"],
+    ["type", "display_name"],
 )
 
 maturity_standing_access = Gauge(
@@ -133,8 +133,7 @@ def main():
         ## Level 2
         # SSO
         maturity_control.labels(
-            level="2",
-            control="sso",
+            level="2", control="sso", display_name="SSO Configured"
         ).set(int(bool(json.loads(tctl_get("connectors")))))
 
         ## Level 3
@@ -145,19 +144,18 @@ def main():
         maturity_control.labels(
             level="3",
             control="audit_activity",
+            display_name="Audit Activity Observed (7d)",
         ).set(audit_activity)
 
         ## Level 4
         # Machine Identity
         maturity_control.labels(
-            level="4",
-            control="machine_id",
+            level="4", control="machine_id", display_name="Machine ID Configured"
         ).set(int(bool(json.loads(tctl_get("bot")))))
 
         # Workload Identity
         maturity_control.labels(
-            level="4",
-            control="workload_id",
+            level="4", control="workload_id", display_name="Workload ID Configured"
         ).set(int(bool(json.loads(tctl_get("workload_identity")))))
 
         # CI/CD
@@ -179,6 +177,7 @@ def main():
         maturity_control.labels(
             level="4",
             control="devops_identity_configured",
+            display_name="CI/CD Identity Configured",
         ).set(int(bool(join_tokens)))
 
         # Access Request activity
@@ -195,6 +194,7 @@ def main():
         maturity_control.labels(
             level="4",
             control="access_request_activity",
+            display_name="Access Requests Used (7d)",
         ).set(int(request_count > 0))
 
         ## Level 5
@@ -202,6 +202,7 @@ def main():
         maturity_control.labels(
             level="5",
             control="access_graph_enabled",
+            display_name="Access Graph Configured",
         ).set(
             tctl_check(
                 "access-review",
@@ -216,6 +217,7 @@ def main():
         maturity_control.labels(
             level="5",
             control="identity_center_enabled",
+            display_name="Identity Center Configured",
         ).set(
             tctl_check(
                 "investigate",
@@ -242,6 +244,7 @@ def main():
         maturity_control.labels(
             level="5",
             control="ssh_key_scanning_enabled",
+            display_name="SSH Key Scanning Configured",
         ).set(scanning_enabled)
 
         # No standing access
@@ -284,8 +287,7 @@ def main():
             no_standing_access = int(not response["identities"])
 
         maturity_control.labels(
-            level="5",
-            control="no_standing_access",
+            level="5", control="no_standing_access", display_name="No Standing Access"
         ).set(no_standing_access)
 
         ## All levels
@@ -306,6 +308,15 @@ def main():
             "linux_desktop": "linux_desktop",
         }
 
+        resource_display_names = {
+            "ssh": "SSH",
+            "kubernetes": "Kubernetes",
+            "databases": "Database",
+            "applicationss": "Application",
+            "windows_desktop": "Windows Desktop",
+            "linux_desktop": "Linux Desktop",
+        }
+
         for resource, resource_kind in resource_kinds.items():
             value = coverage(resource_kind, inventory[resource])
 
@@ -315,6 +326,7 @@ def main():
                 maturity_control.labels(
                     level=str(level),
                     control=f"{resource}_coverage",
+                    display_name=f"≥{threshold:.0%} {resource_display_names[resource]} Coverage",
                 ).set(int(value >= threshold))
 
         maturity_score.set(calculate_score())
